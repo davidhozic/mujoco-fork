@@ -129,10 +129,15 @@ set_target_properties(libmujoco_simulate PROPERTIES OUTPUT_NAME simulate)
 add_library(mujoco::libmujoco_simulate ALIAS libmujoco_simulate)
 set_target_properties(libmujoco_simulate PROPERTIES PUBLIC_HEADER "simulate.h;platform_ui_adapter.h;glfw_adapter.h;glfw_dispatch.h;glfw_corevideo.h;array_safety.h")
 
+# Mark MuJoCo as a static dependency when shard libs are off
+if(NOT BUILD_SHARED_LIBS)
+  target_compile_definitions(libmujoco_simulate PRIVATE MJ_STATIC)
+endif()
 
 target_sources(
   libmujoco_simulate
   PRIVATE simulate.cc
+  simulate_c_api.cc  # C-compatible API (for use in Rust code)
 )
 target_include_directories(libmujoco_simulate
     PUBLIC

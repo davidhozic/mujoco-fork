@@ -101,6 +101,7 @@ if(BUILD_SHARED_LIBS)
 add_library(mujoco SHARED ${MUJOCO_RESOURCE_FILES})
 else()
 add_library(mujoco STATIC ${MUJOCO_RESOURCE_FILES})
+target_compile_definitions(mujoco PRIVATE MJ_STATIC)
 endif()
 
 target_include_directories(

@@ -93,9 +93,6 @@ class Simulate {
   // inject control noise
   void InjectNoise(int key);
 
-  // proxy method to be called from the Rust bindings. This will call the object's destructor
-  void destructFromRust();
-
   // returns whether the viewer is running (exitrequest != 2)
   bool Running();
 
