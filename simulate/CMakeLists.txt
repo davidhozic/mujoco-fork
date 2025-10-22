@@ -140,6 +140,7 @@ target_include_directories(libmujoco_simulate
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/simulate>
     PRIVATE
         ${lodepng_SOURCE_DIR}
+        $<TARGET_PROPERTY:glfw,INTERFACE_INCLUDE_DIRECTORIES>
 )
 target_compile_options(libmujoco_simulate PRIVATE ${MUJOCO_SIMULATE_COMPILE_OPTIONS})
 target_link_libraries(libmujoco_simulate PUBLIC mujoco::mujoco)
