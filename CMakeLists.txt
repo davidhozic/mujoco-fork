@@ -54,6 +54,7 @@ if(EMSCRIPTEN)
   option(MUJOCO_BUILD_TESTS_WASM "Build tests for WASM bindings" ON)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -O3 -pthread -fexceptions")
+  set(BUILD_SHARED_LIBS OFF)
 endif()
 
 if(APPLE AND (MUJOCO_BUILD_EXAMPLES OR MUJOCO_BUILD_SIMULATE))
@@ -90,11 +91,8 @@ else()
 endif()
 
 # Emscripten does not support SHARED libs
-if(NOT EMSCRIPTEN)
-  add_library(mujoco SHARED ${MUJOCO_RESOURCE_FILES})
-else()
-  add_library(mujoco STATIC ${MUJOCO_RESOURCE_FILES})
-endif()
+add_library(mujoco ${MUJOCO_RESOURCE_FILES})
+
 
 target_include_directories(
   mujoco
@@ -258,7 +256,7 @@ endif()
 
 if(NOT (APPLE AND MUJOCO_BUILD_MACOS_FRAMEWORKS))
   set(MUJOCO_TARGETS mujoco)
-  if (EMSCRIPTEN)
+  if (NOT BUILD_SHARED_LIBS)
     list(APPEND MUJOCO_TARGETS lodepng)
   endif()
 
