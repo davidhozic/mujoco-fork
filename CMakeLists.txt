@@ -57,6 +57,8 @@ if(EMSCRIPTEN)
   option(MUJOCO_USE_FILAMENT "Use filament rendering" OFF)
   option(MUJOCO_WASM_THREADS "Build with multi-threading support" ON)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -O3 -fexceptions")
+  set(BUILD_SHARED_LIBS OFF)
+
   if(MUJOCO_WASM_THREADS)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
@@ -133,11 +135,8 @@ else()
 endif()
 
 # Emscripten does not support SHARED libs
-if(NOT EMSCRIPTEN)
-  add_library(mujoco SHARED ${MUJOCO_RESOURCE_FILES})
-else()
-  add_library(mujoco STATIC ${MUJOCO_RESOURCE_FILES})
-endif()
+add_library(mujoco ${MUJOCO_RESOURCE_FILES})
+
 
 target_include_directories(
   mujoco
