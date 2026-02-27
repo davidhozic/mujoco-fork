@@ -28,15 +28,22 @@
 
 namespace mujoco {
 namespace {
+static int glfw_initialization_count = 0;
+
 int MaybeGlfwInit() {
-  static const int is_initialized = []() {
-    auto success = Glfw().glfwInit();
-    if (success == GLFW_TRUE) {
-      std::atexit(Glfw().glfwTerminate);
+  if (glfw_initialization_count == 0) {
+    if (Glfw().glfwInit() != GLFW_TRUE) {
+      return GLFW_FALSE;
     }
-    return success;
-  }();
-  return is_initialized;
+  }
+  glfw_initialization_count++;
+  return GLFW_TRUE;
+}
+
+void MaybeGlfwTerminate() {
+  if (--glfw_initialization_count == 0) {
+    Glfw().glfwTerminate();
+  }
 }
 
 GlfwAdapter& GlfwAdapterFromWindow(GLFWwindow* window) {
@@ -113,6 +120,7 @@ GlfwAdapter::~GlfwAdapter() {
   FreeMjrContext();
   Glfw().glfwMakeContextCurrent(nullptr);
   Glfw().glfwDestroyWindow(window_);
+  MaybeGlfwTerminate();
 }
 
 std::pair<double, double> GlfwAdapter::GetCursorPosition() const {
