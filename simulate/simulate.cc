@@ -2129,6 +2129,19 @@ Simulate::Simulate(std::unique_ptr<PlatformUIAdapter> platform_ui,
   mjv_defaultScene(&scn);
 }
 
+Simulate::~Simulate() {
+  this->exitrequest.store(1);
+  cond_loadrequest.notify_all();
+  mjv_freeScene(&scn);
+  scn.maxgeom = 0;
+  if (is_passive_) {
+    mj_deleteData(d_passive_);
+    mj_deleteModel(m_passive_);
+    d_passive_ = nullptr;
+    m_passive_ = nullptr;
+  }
+}
+
 
 //------------------------- Synchronize render and physics threads ---------------------------------
 
@@ -2480,7 +2493,9 @@ void Simulate::Load(mjModel* m, mjData* d, const char* displayed_filename) {
     // Wait for the render thread to be done loading
     // so that we know the old model and data's memory can
     // be free'd by the other thread (sometimes python)
-    cond_loadrequest.wait(lock, [this]() { return this->loadrequest == 0; });
+    cond_loadrequest.wait(lock, [this]() { 
+        return this->loadrequest == 0 || this->exitrequest.load(); 
+    });
   }
 }
 
@@ -2992,7 +3007,7 @@ void Simulate::Render() {
 
 
 
-void Simulate::RenderLoop() {
+void Simulate::RenderInit() {
   // Set timer callback (milliseconds)
   mjcb_time = Timer;
 
@@ -3065,9 +3080,9 @@ void Simulate::RenderLoop() {
 
   frames_ = 0;
   last_fps_update_ = mj::Simulate::Clock::now();
+}
 
-  // run event loop
-  while (!this->platform_ui->ShouldCloseWindow() && !this->exitrequest.load()) {
+void Simulate::RenderFrame() {
     {
       const MutexLock lock(this->mtx);
 
@@ -3138,13 +3153,14 @@ void Simulate::RenderLoop() {
       fps_ = frames_ / interval;
       frames_ = 0;
     }
-  }
+}
 
-  const MutexLock lock(this->mtx);
-  mjv_freeScene(&this->scn);
-  if (is_passive_) {
-    mj_deleteData(d_passive_);
-    mj_deleteModel(m_passive_);
+void Simulate::RenderLoop() {
+  RenderInit();
+
+  // run event loop
+  while (!this->platform_ui->ShouldCloseWindow() && !this->exitrequest.load()) {
+    RenderFrame();
   }
 
   this->exitrequest.store(2);
