@@ -298,6 +298,9 @@ endif()
 
 if(NOT EMSCRIPTEN AND NOT (APPLE AND MUJOCO_BUILD_MACOS_FRAMEWORKS))
   set(MUJOCO_TARGETS mujoco)
+  if(NOT BUILD_SHARED_LIBS)
+    list(APPEND MUJOCO_TARGETS lodepng miniz)
+  endif()
 
   # Install the libraries.
   install(
