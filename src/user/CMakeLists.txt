@@ -37,6 +37,7 @@ set(MUJOCO_USER_SRCS
     user_util.h
     user_vfs.cc
     user_vfs.h
+    user_miri.cc
 )
 
 target_sources(mujoco PRIVATE ${MUJOCO_USER_SRCS})
