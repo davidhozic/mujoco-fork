@@ -53,6 +53,7 @@ class Simulate {
   Simulate(
       std::unique_ptr<PlatformUIAdapter> platform_ui_adapter,
       mjvCamera* cam, mjvOption* opt, mjvPerturb* pert, bool is_passive);
+  ~Simulate();
 
   // Synchronize state with UI inputs, and update visualization.  If state_only
   // is false mjData and mjModel will be updated, otherwise only the subset of
@@ -78,6 +79,12 @@ class Simulate {
   // functions below are used by the renderthread
   // load mjb or xml model that has been requested by load()
   void LoadOnRenderThread();
+
+  // initialize the renderer
+  void RenderInit();
+
+  // render a single frame
+  void RenderFrame();
 
   // render the ui to the window
   void Render();
