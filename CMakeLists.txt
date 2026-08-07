@@ -141,6 +141,8 @@ endif()
 # Emscripten does not support SHARED libs
 if(NOT EMSCRIPTEN)
   find_package(Threads REQUIRED)
+endif()
+if(BUILD_SHARED_LIBS AND NOT EMSCRIPTEN)
   add_library(mujoco SHARED ${MUJOCO_RESOURCE_FILES})
 else()
   add_library(mujoco STATIC ${MUJOCO_RESOURCE_FILES})
@@ -323,6 +325,9 @@ endif()
 
 if(NOT EMSCRIPTEN AND NOT (APPLE AND MUJOCO_BUILD_MACOS_FRAMEWORKS))
   set(MUJOCO_TARGETS mujoco)
+  if(NOT BUILD_SHARED_LIBS)
+    list(APPEND MUJOCO_TARGETS lodepng miniz)
+  endif()
 
   # Install the libraries.
   install(
