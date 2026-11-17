@@ -102,7 +102,8 @@ if(SIMULATE_GLFW_DYNAMIC_SYMBOLS)
 endif()
 add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
-add_library(libmujoco_simulate STATIC $<TARGET_OBJECTS:platform_ui_adapter> $<TARGET_OBJECTS:lodepng>)
+# A static mujoco library already holds the lodepng objects.
+add_library(libmujoco_simulate STATIC $<TARGET_OBJECTS:platform_ui_adapter> $<$<BOOL:${BUILD_SHARED_LIBS}>:$<TARGET_OBJECTS:lodepng>>)
 set_target_properties(libmujoco_simulate PROPERTIES OUTPUT_NAME simulate)
 add_library(mujoco::libmujoco_simulate ALIAS libmujoco_simulate)
 set_target_properties(libmujoco_simulate PROPERTIES PUBLIC_HEADER "simulate_c.h;simulate.h;platform_ui_adapter.h;glfw_adapter.h;glfw_dispatch.h;glfw_corevideo.h;array_safety.h")
@@ -110,6 +111,18 @@ set_target_properties(libmujoco_simulate PROPERTIES PUBLIC_HEADER "simulate_c.h;
 # Mark MuJoCo as a static dependency when shared libs are off
 if(NOT BUILD_SHARED_LIBS)
   target_compile_definitions(libmujoco_simulate PRIVATE MJ_STATIC)
+  if(NOT MUJOCO_SIMULATE_USE_SYSTEM_GLFW)
+    # Embed GLFW into libsimulate 
+    target_sources(libmujoco_simulate PRIVATE $<TARGET_OBJECTS:glfw>)
+
+    # Put the glfw library out of target directory
+    set_target_properties(
+      glfw
+      PROPERTIES ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/_deps/lib"
+                 C_VISIBILITY_PRESET hidden
+                 OBJC_VISIBILITY_PRESET hidden
+    )
+  endif()
 endif()
 
 target_sources(

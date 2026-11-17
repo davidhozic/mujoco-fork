@@ -238,6 +238,9 @@ fetchpackage(
   GIT_TAG       ${MUJOCO_DEP_VERSION_miniz}
   TARGETS       miniz
 )
+if(MSVC)
+  target_compile_options(miniz PRIVATE /Z7)
+endif()
 if(_BUILD_TESTS_WAS_DEFINED)
   set(BUILD_TESTS "${_OLD_BUILD_TESTS}")
 else()

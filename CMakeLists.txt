@@ -132,7 +132,7 @@ set(MUJOCO_HEADERS
 )
 
 # Add metadata to mujoco.dll when building on Windows.
-if(WIN32)
+if(WIN32 AND BUILD_SHARED_LIBS)
   set(MUJOCO_RESOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/dist/mujoco.rc)
 else()
   set(MUJOCO_RESOURCE_FILES "")
@@ -191,6 +191,9 @@ endif()
 
 
 target_compile_definitions(mujoco PRIVATE _GNU_SOURCE CCD_STATIC_DEFINE MUJOCO_DLL_EXPORTS -DMC_IMPLEM_ENABLE)
+if(WIN32 AND NOT BUILD_SHARED_LIBS)
+  target_compile_definitions(mujoco PUBLIC MJ_STATIC)
+endif()
 if(MUJOCO_ENABLE_AVX_INTRINSICS)
   target_compile_definitions(mujoco PUBLIC mjUSEPLATFORMSIMD)
 endif()
@@ -220,6 +223,22 @@ target_link_libraries(
 
 if(NOT EMSCRIPTEN)
   target_link_libraries(mujoco PRIVATE Threads::Threads)
+endif()
+
+# Put other libraries into the same archive as MuJoCO, when linking statically.
+if(NOT BUILD_SHARED_LIBS AND NOT EMSCRIPTEN)
+  target_sources(
+    mujoco
+    PRIVATE $<TARGET_OBJECTS:ccd>
+            $<TARGET_OBJECTS:miniz>
+            $<TARGET_OBJECTS:qhullstatic_r>
+            $<TARGET_OBJECTS:tinyxml2>
+  )
+  # Keep the archives of these libraries out of the output directory
+  set_target_properties(
+    ccd miniz qhullstatic_r tinyobjloader tinyxml2
+    PROPERTIES ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/_deps/lib"
+  )
 endif()
 
 set_target_properties(

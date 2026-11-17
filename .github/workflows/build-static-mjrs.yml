@@ -1,0 +1,167 @@
+# An action configuration for MuJoCo-rs static linking configuration.
+# This is NOT AN OFFICIAL GOOGLE DEEPMIND SCRIPT, NOR ARE THE BUILDS.
+
+name: Build unofficial statics
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-static:
+    name: "build-static ${{ matrix.os }} (CRT: ${{ matrix.crt }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-15-intel, ubuntu-22.04-arm, windows-11-arm, macos-15]
+        crt: [dynamic]
+        include:
+          # +crt-static extra config.
+          # Windows needs MSVC /MT runtime.
+          # Linux builds already work.
+          # macOS ignores.
+          - os: windows-2022
+            crt: static
+          - os: windows-11-arm
+            crt: static
+          - os: ubuntu-22.04
+            llvm: 15
+          - os: ubuntu-22.04-arm
+            llvm: 15
+          - os: macos-15-intel
+            llvm: 17
+          - os: macos-15
+            llvm: 17
+
+    env:
+      LLVM_MAJOR: ${{ matrix.llvm }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # The lib*-dev packages are the GLFW build dependencies.
+          sudo apt-get install -y \
+            clang-$LLVM_MAJOR llvm-$LLVM_MAJOR lld-$LLVM_MAJOR cmake ninja-build \
+            libgl1-mesa-dev libwayland-dev libxinerama-dev libxcursor-dev \
+            libxkbcommon-dev libxrandr-dev libxi-dev
+          echo "/usr/lib/llvm-$LLVM_MAJOR/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@$LLVM_MAJOR cmake ninja
+          echo "$(brew --prefix llvm@$LLVM_MAJOR)/bin" >> "$GITHUB_PATH"
+
+      - name: Check tool versions
+        if: runner.os != 'Windows'
+        run: |
+          cmake --version
+          ninja --version
+          clang --version | grep "clang version $LLVM_MAJOR\."
+
+      - name: Build MuJoCo
+        run: |
+          # LTO and MUJOCO_HARDEN are for Clang only.
+          clang_only=OFF
+          crt_args=()
+          if [ "$RUNNER_OS" != Windows ]; then
+            export CMAKE_GENERATOR=Ninja CC=clang CXX=clang++
+            clang_only=ON
+            # MuJoCo sets -mmacosx-version-min only on some targets (not ccd, miniz, tinyobjloader).
+            # Clang uses this variable for the rest instead of the SDK version.
+            if [ "$RUNNER_OS" = macOS ]; then export MACOSX_DEPLOYMENT_TARGET=11.0; fi
+            # Mark the objects for CET (x86_64) or BTI and PAC (aarch64).
+            if [ "$RUNNER_OS" = Linux ]; then
+              if [ "$RUNNER_ARCH" = ARM64 ]; then export CFLAGS=-mbranch-protection=standard; else export CFLAGS=-fcf-protection=full; fi
+              export CXXFLAGS=$CFLAGS
+            fi
+          else
+            # The VS 2022 toolset (14.44) on both arches. The ARM64 image defaults to VS 2026 (14.5x), which raises the user's minimum.
+            # /EHs: extern "C" functions may throw. MuJoCo leaves mju_error with longjmp through C++
+            # frames, which crashes with /EHsc when /GL is off. /GL objects need the user's exact MSVC
+            # linker, so LTO stays off. The define keeps msvcp140.dll older than 14.40 working.
+            crt_args=(-T v143 "-DCMAKE_CXX_FLAGS=-DWIN32 -D_WINDOWS -GR -EHs -D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR")
+            if [ "${{ matrix.crt }}" = static ]; then
+              # GLFW selects its own runtime unless USE_MSVC_RUNTIME_LIBRARY_DLL is OFF.
+              crt_args+=(-DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded \
+                -DUSE_MSVC_RUNTIME_LIBRARY_DLL:BOOL=OFF)
+            fi
+          fi
+          cmake -B build "${crt_args[@]}" \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DMUJOCO_ENABLE_LTO:BOOL=$clang_only \
+            -DBUILD_SHARED_LIBS:BOOL=OFF \
+            -DMUJOCO_HARDEN:BOOL=$clang_only \
+            -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF \
+            -DMUJOCO_BUILD_TESTS:BOOL=OFF
+          cmake --build build --parallel --config Release --target libmujoco_simulate
+
+      - name: Convert LLVM bitcode to machine code
+        if: runner.os != 'Windows'
+        run: |
+          # A relocatable link (-r) runs LTO and writes one machine-code object per library.
+          # Only the API (non-hidden mj* and mujoco_c* names) stays global, so the other names cannot
+          # clash with the user's.
+          for lib in build/lib/*.a; do
+            obj="${lib%.a}.o"
+            # libsimulate gets a private copy of the lodepng that libmujoco holds.
+            extra=""; [ "$lib" = build/lib/libsimulate.a ] && extra=$(find build -name lodepng.cpp.o)
+            if [ "$RUNNER_OS" = macOS ]; then
+              # Hidden names become local in the first link; ld cannot export them.
+              clang++ -r -nostdlib -flto=thin -O3 -mmacosx-version-min=11 -Wl,-force_load,"$lib" $extra -o "$obj.tmp"
+              # ld requires each exported name to be defined, so list only the defined API names.
+              nm -gUj "$obj.tmp" | grep -E '^_(mj|_mj|mujoco_c)' > "$obj.exp"
+              ld -r -exported_symbols_list "$obj.exp" "$obj.tmp" -o "$obj"
+              rm "$obj.tmp" "$obj.exp"
+            else
+              # Also embed the used part of the static C++ runtime.
+              clang++ -r -nostdlib -flto=thin -O3 -fuse-ld=lld -Wl,--build-id=none \
+                -Wl,--whole-archive "$lib" -Wl,--no-whole-archive $extra "$(clang++ -print-file-name=libstdc++.a)" -o "$obj"
+              llvm-objcopy --localize-hidden --wildcard --remove-section=.note.stapsdt --keep-global-symbol='mj*' \
+                --keep-global-symbol='_mj*' --keep-global-symbol='mujoco_c*' "$obj"
+            fi
+            rm "$lib"
+            llvm-ar rcs "$lib" "$obj"
+            rm "$obj"
+          done
+
+      - name: Upload artifacts to GitHub release.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          os=$(echo "$RUNNER_OS" | tr '[:upper:]' '[:lower:]')
+          if [ "$RUNNER_ARCH" = ARM64 ]; then arch=aarch64; else arch=x86_64; fi
+          name="$GITHUB_REF_NAME-$os-$arch-crt-${{ matrix.crt }}"
+
+          # Tag == unofficial-<version>-static.
+          root="mujoco-${GITHUB_REF_NAME#unofficial-}"
+          mkdir -p build/package/mujoco/$root/lib build/package/simulate/$root/lib
+          find build/lib -name '*simulate.*' -exec mv {} build/package/simulate/$root/lib/ \;
+          find build/lib \( -name '*.a' -o -name '*.lib' \) -exec mv {} build/package/mujoco/$root/lib/ \;
+          cp -r include build/package/mujoco/$root/
+          # Tells build.rs that the archives embed the C++ runtime (no -lstdc++).
+          if [ "$RUNNER_OS" = Linux ]; then touch build/package/mujoco/$root/lib/.embedded-cxx-runtime; fi
+          cd build/package
+          ls -l mujoco/$root/lib/*mujoco.* simulate/$root/lib/*simulate.* mujoco/$root/lib
+
+          for part in mujoco simulate; do
+            cp ../../LICENSE ../../THIRD_PARTY_NOTICES $part/$root/
+            if [ "$RUNNER_OS" = Windows ]; then
+              (cd $part/$root && cmake -E tar cf "../../$part-$name.zip" --format=zip *)
+            else
+              tar -czf "$part-$name.tar.gz" -C $part $root
+            fi
+          done
+          gh release upload "$GITHUB_REF_NAME" *-unofficial-* --clobber
