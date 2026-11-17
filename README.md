@@ -14,13 +14,27 @@
   </a>
 </p>
 
+
+> [!WARNING]
+> **This is NOT the official MuJoCo repository.** It is a modified copy that the
+> [MuJoCo-rs](https://github.com/davidhozic/mujoco-rs) project maintains. Google DeepMind does
+> not maintain, support or endorse this copy or its builds.
+>
+> This copy adds the following changes to MuJoCo:
+>
+> - Support for static linking.
+> - A C interface to the C++ Simulate viewer, for use from Rust.
+> - Allocation hooks that make MuJoCo compatible with Rust's Miri.
+>
+> The archives on the release page of this copy are unofficial builds of static libraries.
+> For the official MuJoCo and its official builds, go to
+> [google-deepmind/mujoco](https://github.com/google-deepmind/mujoco).
+
 **MuJoCo** stands for **Mu**lti-**Jo**int dynamics with **Co**ntact. It is a
 general purpose physics engine that aims to facilitate research and development
 in robotics, biomechanics, graphics and animation, machine learning, and other
 areas which demand fast and accurate simulation of articulated structures
 interacting with their environment.
-
-This repository is maintained by [Google DeepMind](https://www.deepmind.com/).
 
 MuJoCo has a C API and is intended for researchers and developers. The runtime
 simulation module is tuned to maximize performance and operates on low-level
